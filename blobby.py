@@ -13,6 +13,28 @@ from pprint import pprint
 #    entry is {mode} {filename}{null byte}{sha1 of tree or blob in binary}
 
 
+git_object = namedtuple('git_object', 'gtype size content')
+
+git_packed = namedtuple('git_packed',
+                        'version num_objs objs')
+git_packed_object = namedtuple('git_packed_object',
+                               'ptype size real_size content')
+
+
+obj_types = {
+    0x01: 'OBJ_COMMIT',
+    0x02: 'OBJ_TREE',
+    0x03: 'OBJ_BLOB',
+    0x04: 'OBJ_TAG',
+    0x06: 'OBJ_OFS_DELTA',
+    0x07: 'OBJ_REF_DELTA'
+}
+
+obj_types_inv = {}
+for k, v in obj_types.items():
+    obj_types_inv[v] = k
+
+
 def consume_bytes(data, size):
     return data[:size], data[size:]
 
@@ -39,9 +61,6 @@ def read_entry(data):
     filename, data = consume_bytes_to_sep(data, b'\x00')
     sha1, data = consume_bytes(data, 20)
     return mode, filename, sha1, data
-
-
-git_object = namedtuple('git_object', 'gtype size content')
 
 
 def read_git_object(path):
@@ -72,24 +91,6 @@ def read_git_object(path):
             return git_object('blob', size, content.decode())
         else:
             raise Exception('unknown git object')
-
-
-obj_types = {
-    0x01: 'OBJ_COMMIT',
-    0x02: 'OBJ_TREE',
-    0x03: 'OBJ_BLOB',
-    0x04: 'OBJ_TAG',
-    0x06: 'OBJ_OFS_DELTA',
-    0x07: 'OBJ_REF_DELTA'
-}
-
-obj_types_inv = {}
-for k, v in obj_types.items():
-    obj_types_inv[v] = k
-
-
-def read_packed_index(data):
-    pass
 
 
 def read_packed_object_entry(data):
@@ -153,12 +154,6 @@ def read_packed_object_entry(data):
     return obj_type, obj_size, obj, data
 
 
-git_packed = namedtuple('git_packed',
-                        'version num_objs objs')
-git_packed_object = namedtuple('git_packed_object',
-                               'ptype size real_size content')
-
-
 def read_git_packed(path):
     """Read a git pack file"""
     with open(path, 'rb') as f:
@@ -185,7 +180,31 @@ damaged""")
         return git_packed(version, num_objs, packed_objs)
 
 
-def read_git_repository(path):
+def print_git_object(obj):
+    """Pretty print git object"""
+    pprint('git object')
+    print('type = ', end='')
+    pprint(obj.gtype)
+    print('size = ', end='')
+    pprint(obj.size)
+    print('content = ', end='')
+    pprint(obj.content)
+
+
+def print_git_packed(obj):
+    """Pretty print git packed objects"""
+    pprint('git packed object')
+    print('type = ', end='')
+    pprint(obj_types[obj.ptype])
+    print('size = ', end='')
+    pprint(obj.size)
+    print('real size = ', end='')
+    pprint(obj.real_size)
+    print('content = ', end='')
+    pprint(obj.content)
+
+
+def print_git_repository(path):
     """Reads a git repository and dumps meta information about all objects
     """
     gitdir = path / '.git'
@@ -200,9 +219,7 @@ def read_git_repository(path):
                       if dd.is_dir() if len(dd.stem) == 2):
         for obj in objtopdir.iterdir():
             obj = read_git_object(obj)
-            pprint(obj.gtype)
-            pprint(obj.size)
-            pprint(obj.content)
+            print_git_object(obj)
             print()
 
     # Handle all the packed objects
@@ -213,10 +230,7 @@ def read_git_repository(path):
         pprint(objs.version)
         pprint(objs.num_objs)
         for obj in objs.objs:
-            pprint(obj_types[obj.ptype])
-            pprint(obj.size)
-            pprint(obj.real_size)
-            pprint(obj.content)
+            print_git_packed(obj)
             print()
 
 
@@ -229,4 +243,4 @@ parser.add_argument('repo', type=str, help='path to git repository')
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    read_git_repository(Path(args.repo))
+    print_git_repository(Path(args.repo))
